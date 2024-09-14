@@ -8,13 +8,14 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use clap::Parser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
-use rand::Rng;
+// use rand::Rng;
 use regex::Regex;
 use tree_sitter::Language;
 use tree_sitter::Tree;
 use tree_splicer::splice::{Config, Splicer};
 use treereduce::Check;
 use treereduce::CmdCheck;
+use uuid::Uuid;
 
 /// An easy-to-use grammar-based black-box fuzzer
 #[derive(Clone, Debug, clap::Parser)]
@@ -142,21 +143,49 @@ fn make_check(
     let mut argv: Vec<_> = check.iter().collect();
     let cmd = argv[0];
     argv.remove(0);
+
+    let default_interesting_patterns = vec![r"AddressSanitizer", r"Fatal", r"DCHECK", r"Check"];
+
+    let default_uninteresting_patterns = vec![
+        r"RangeError",
+        r"SyntaxError",
+        r"ReferenceError",
+        r"TypeError",
+        r"URIError",
+        r"EvalError",
+        r"InternalError",
+    ];
+
     let stdout_regex = match &interesting_stdout {
         Some(r) => Some(Regex::new(r).context("Invalid interesting stdout regex")?),
-        None => None,
+        None => Some(
+            Regex::new(&default_interesting_patterns.join("|"))
+                .context("Invalid default interesting stdout regex")?,
+        ),
     };
+
     let stderr_regex = match &interesting_stderr {
         Some(r) => Some(Regex::new(r).context("Invalid interesting stderr regex")?),
-        None => None,
+        None => Some(
+            Regex::new(&default_interesting_patterns.join("|"))
+                .context("Invalid default interesting stderr regex")?,
+        ),
     };
+
     let un_stdout_regex = match &uninteresting_stdout {
         Some(r) => Some(Regex::new(r).context("Invalid uninteresting stdout regex")?),
-        None => None,
+        None => Some(
+            Regex::new(&default_uninteresting_patterns.join("|"))
+                .context("Invalid default uninteresting stdout regex")?,
+        ),
     };
+
     let un_stderr_regex = match &uninteresting_stderr {
         Some(r) => Some(Regex::new(r).context("Invalid uninteresting stderr regex")?),
-        None => None,
+        None => Some(
+            Regex::new(&default_uninteresting_patterns.join("|"))
+                .context("Invalid default uninteresting stderr regex")?,
+        ),
     };
     interesting_exit_codes.extend(128..256);
     Ok(CmdCheck::new(
@@ -201,11 +230,11 @@ fn check(
         } else {
             eprintln!("interesting!");
         }
-        let mut rng = rand::thread_rng();
-        let i = rng.gen_range(0..10192);
-        fs::write(format!("tree-crasher-{i}.out"), inp).unwrap();
-        fs::write(format!("tree-crasher-{i}.stdout"), stdout).unwrap();
-        fs::write(format!("tree-crasher-{i}.stderr"), stderr).unwrap();
+        // let mut rng = rand::thread_rng();
+        let i = Uuid::new_v4(); //rng.gen_range(0..10192);
+        fs::write(format!("crash-{i}.out"), inp).unwrap();
+        fs::write(format!("crash-{i}.stdout"), stdout).unwrap();
+        fs::write(format!("crash-{i}.stderr"), stderr).unwrap();
         let tree = parse(language, &String::from_utf8_lossy(inp)).unwrap();
         match treereduce::treereduce_multi_pass(
             language,
@@ -222,7 +251,7 @@ fn check(
         ) {
             Err(e) => eprintln!("Failed to reduce! {e}"),
             Ok((reduced, _)) => {
-                fs::write(format!("tree-crasher-{i}.reduced.out"), reduced.text).unwrap();
+                fs::write(format!("crash-{i}.reduced.out"), reduced.text).unwrap();
             }
         }
     }
