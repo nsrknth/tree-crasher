@@ -4,11 +4,10 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
-
 use anyhow::{Context, Result};
 use clap::Parser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
-// use rand::Rng;
+use rand::Rng;
 use regex::Regex;
 use tree_sitter::Language;
 use tree_sitter::Tree;
@@ -300,16 +299,26 @@ fn job(
         }
     }
     loop {
+        let mut rng: rand::prelude::ThreadRng = rand::thread_rng();
+        const INTER_SPLICES_RANGE: std::ops::Range<usize> = 12..48;
+        const CHAOS_RANGE: std::ops::Range<u8> = 15..20;
+        const DELETIONS_RANGE: std::ops::Range<u8> = 10..20;
+
+        let random_inter_splices = rng.gen_range(INTER_SPLICES_RANGE);
+        let random_seed = rng.gen::<u64>();
+        let random_chaos_range = rng.gen_range(CHAOS_RANGE);
+        let random_deletions_range = rng.gen_range(DELETIONS_RANGE);
+
         let config = Config {
-            chaos: args.chaos,
-            deletions: args.deletions,
+            chaos: random_chaos_range,         //args.chaos,
+            deletions: random_deletions_range, //args.deletions,
             language,
             // intra_splices: 10,
-            inter_splices: args.mutations,
+            inter_splices: random_inter_splices, //args.mutations,
             node_types: node_types2.clone(),
             max_size: args.max_size,
             reparse: usize::MAX,
-            seed: args.seed,
+            seed: random_seed, //args.seed,
         };
         let start = Instant::now();
         let mut execs = 0;
@@ -320,7 +329,7 @@ fn job(
             let _code = check(language, node_types1, &chk, &out);
             execs += 1;
             let secs = start.elapsed().as_secs();
-            if execs % 10_000 == 0 {
+            if execs % 10_00 == 0 {
                 println!("execs/sec: {}", execs / secs);
             }
         }
